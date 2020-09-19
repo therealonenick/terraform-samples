@@ -1,0 +1,9 @@
+#cloud-config
+package_upgrade: false
+packages:
+  - docker
+runcmd:
+  - yum update -y
+  - systemctl start docker
+  - docker run -d  -p 80:80 nginxdemos/hello
+#  #- [ sh, -c, "chmod 755 /var/tmp" ]
