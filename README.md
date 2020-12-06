@@ -16,4 +16,4 @@ Whiles these templates are for testing/learning/experimentation, it would be wis
 
 ## Warning about Terraform
 
-In newer versions of Terraform, unused variables must start with `TF_VARIABLE_`.  During experimentation and usage of these examples, if you opt to remove a section or module but don't want to delete the variable, simple append an empty variable with that prefix.
+In newer versions of Terraform, unused variables must start with `TF_VAR_`.  During experimentation and usage of these examples, if you opt to remove a section or module but don't want to delete the variable, simple append an empty variable with that prefix.
