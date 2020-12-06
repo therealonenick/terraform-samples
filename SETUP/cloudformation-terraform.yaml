@@ -1,0 +1,386 @@
+#Standard Pipeline Template
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Setup Pipeline and Point to repo to build an ECR that contains Terraform'
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Setup"
+        Parameters:
+          - Bucket
+          - DockerImageName
+          - Env
+          - awsAccount
+      - Label:
+          default: "GitHub"
+        Parameters:
+          - GHAccount
+          - GHRepo
+          - GHBranch
+          - GHTokenSecretName
+          - GHToken
+      - Label:
+         default: Terraform
+        Parameters:
+          - TFVersion
+          - TFBucketName
+          - TFDynamoName
+
+Parameters:
+  Bucket:
+    Type: String
+    Description: Bucket to store artifacts (will be ammended with active region)
+    MinLength: 1
+  awsAccount:
+    Type: String
+    Description: Assumed Account Number for S3 Permissions
+    MinLength: 1
+  GHAccount:
+    Type: String
+    Description: GitHub Account
+    MinLength: 1
+  GHRepo:
+    Type: String
+    Description: Github Repo
+    MinLength: 1
+  GHBranch:
+    Type: String
+    Description: Github Branch
+    MinLength: 1
+  GHTokenSecretName:
+    Type: String 
+    Description: Secret name to store Github Token
+    MinLength: 1
+  GHToken:
+    Type: String 
+    Description: GitHub Token (use Secrets if possible)
+    MinLength: 1
+    NoEcho: True
+  BuildImage: 
+    Type: String
+    Description: Pipeline BuildImage (not the source image for the Container)
+    Default: "aws/codebuild/standard:4.0"
+    AllowedValues:
+      - "aws/codebuild/standard:2.0"
+      - "aws/codebuild/standard:3.0"
+      - "aws/codebuild/standard:4.0"
+  Env:
+    Type: String
+    Description: Runtime Envirionment (dev, qa, prod..etc)
+    MinLength: 1
+  DockerImageName:
+    Type: String
+    Description: Name of the ECR Repo name
+    MinLength: 1
+  TFVersion:
+    Type: String
+    Description: Version of Terraform to build.  Enter the full version, ie, '0.12.3'
+    Default: '0.13.5'
+  TFBucketName:
+    Type: String
+    Description: Name of Bucket for Terraform State File
+    MinLength: 1
+  TFDynamoName:
+    Type: String
+    Description: Name of the ECR Repo name
+    MinLength: 1
+
+
+
+Resources:
+
+  rGitHubSecret:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Description: GitHub Key
+      Name: !Ref GHTokenSecretName
+      SecretString: !Ref GHToken
+
+  rPipeRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub '${Bucket}-PIPE-ROLE-${Env}'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'sts:AssumeRole'
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+      Policies:
+        - PolicyName: !Sub '${Bucket}-PIPE-POLICY-${Env}'
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'secretsmanager:*'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 'logs:DescribeLogStreams'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'codebuild:BatchGetBuilds'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'codebuild:StartBuild'
+                Resource:
+                  - !GetAtt 
+                      - rBuildProj
+                      - Arn
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                  - 's3:ListObjects'
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !GetAtt rPipeBucket.Arn
+                  - !Sub 
+                    - '${PipelineBucketArn}/*'
+                    - {PipelineBucketArn: !GetAtt rPipeBucket.Arn}
+  rBuildRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub '${Bucket}-BUILD-ROLE-${Env}-${AWS::Region}'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'sts:AssumeRole'
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+      Policies:
+        - PolicyName: !Sub '${Bucket}-BUILD-POLICY-${Env}-${AWS::Region}'
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 'logs:DescribeLogStreams'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'ecr:*'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:*'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                  - 's3:ListObjects'
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !GetAtt rPipeBucket.Arn
+                  - !Sub 
+                    - '${PipeBucketArn}/*'
+                    - {PipeBucketArn: !GetAtt rPipeBucket.Arn}
+              - Effect: Allow
+                Action: 
+                  - 's3:PutObject'
+                Resource:
+                  - !GetAtt rBucket.Arn
+                  - !Sub 
+                    - '${BucketArn}/*'
+                    - {BucketArn: !GetAtt rBucket.Arn}
+  rPipeBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${Bucket}-${AWS::Region}-artifacts'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+  
+  rBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${Bucket}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+    
+  rBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref rBucket
+      PolicyDocument:
+        Statement:
+          - Sid: Allow From Account
+            Effect: Allow
+            Action:
+              - 's3:*'
+            Resource:
+              - !Sub 
+                - '${BucketArn}/*'
+                - {BucketArn: !GetAtt rBucket.Arn}
+            Principal:
+              AWS:
+                - !Ref awsAccount
+
+  rTFBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${TFBucketName}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+    
+  rTFBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref rTFBucket
+      PolicyDocument:
+        Statement:
+          - Sid: Allow From Account
+            Effect: Allow
+            Action:
+              - 's3:*'
+            Resource:
+              - !Sub 'arn:aws:s3:::${rTFBucket}/*'
+            Principal:
+              AWS:
+                - !Ref awsAccount
+
+  rTFDynamoDB:
+    Type: 'AWS::DynamoDB::Table'
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Ref TFDynamoName
+      AttributeDefinitions:
+        - AttributeName: 'LockID'
+          AttributeType: 'S'
+      BillingMode: 'PROVISIONED'
+      KeySchema:
+        - AttributeName: 'LockID'
+          KeyType: 'HASH'
+      ProvisionedThroughput: 
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  rPipe:
+    Type: 'AWS::CodePipeline::Pipeline'
+    Properties:
+      Name: !Sub '${Bucket}-PIPE-${Env}'
+      RoleArn: !GetAtt rPipeRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref rPipeBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Version: '1'
+                Provider: GitHub
+              OutputArtifacts:
+                - Name: SourceOutput
+              Configuration:
+                Owner: !Ref GHAccount
+                Repo: !Ref GHRepo
+                Branch: !Ref GHBranch
+                OAuthToken: !Sub '{{resolve:secretsmanager:${GHTokenSecretName}}}'
+                PollForSourceChanges: 'true'
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: Create
+              InputArtifacts: 
+                - Name: SourceOutput
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: '1'
+                Provider: CodeBuild
+              OutputArtifacts:
+                - Name: BuildOutput
+              Configuration:
+                ProjectName: !Ref rBuildProj
+              RunOrder: 1
+  
+  rBuildProj:
+    Type: 'AWS::CodeBuild::Project'
+    Properties:
+      Name: !Sub '${Bucket}-BUILD-PROJ-${Env}'
+      ServiceRole: !Ref rBuildRole
+      Source:
+        Type: CODEPIPELINE
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        PrivilegedMode: True
+        #Image: 'aws/codebuild/standard:4.0'
+        Image: !Ref BuildImage
+        EnvironmentVariables:
+          - Name: BUCKET_NAME
+            Value: !Sub '${Bucket}-${AWS::Region}'
+            Type: PLAINTEXT
+          - Name: AWS_ACCOUNT_ID
+            Value: !Ref awsAccount
+            Type: PLAINTEXT
+          - Name: ECR_NAME
+            Value: !Ref DockerImageName
+            Type: PLAINTEXT
+          - Name: TF_VERSION
+            Type: PLAINTEXT
+            Value: !Ref TFVersion
+      Cache:
+        Type: NO_CACHE
+      TimeoutInMinutes: 10
+      BadgeEnabled: False
+  rECRRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref DockerImageName
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+            -
+              Sid: AllowAll
+              Effect: Allow
+              Principal:
+                Service:
+                  - codepipeline.amazonaws.com
+                  - codebuild.amazonaws.com
+              Action:
+                - "ecr:*"
+
+  rTFBucketSSM:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Name: '/project/tf/stateBucket'
+      Value: !Sub '${TFBucketName}-${AWS::Region}'
+
+  rTFDynamoSSM:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Name: '/project/tf/dynamoTable/arn'
+      Value: !GetAtt rTFDynamoDB.Arn

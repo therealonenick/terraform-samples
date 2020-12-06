@@ -1,0 +1,327 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: 'Setup to run a project that builds off of Terraform ECR image'
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Setup"
+        Parameters:
+          - pBucket
+          - pEnv
+          - pAccount
+      - Label:
+          default: "GitHub"
+        Parameters:
+          - pGHAccount
+          - pGHRepo
+          - pGHBranch
+          - pGHTokenSecretName
+          - pGHToken
+      - Label:
+          default: "ECR"
+        Parameters:
+          - pECRImageURI
+      - Label:
+          default: "Terraform"
+        Parameters:
+          - pTFBucketString
+          - pTFBucketSSM
+          - pTFDynamoSSM
+Parameters:
+  pBucket:
+    Type: String
+    Description: Bucket to store artifacts
+    MinLength: 1
+  pAccount:
+    Type: String
+    Description: Assumed Account Number for S3 Permissions
+    MinLength: 1
+  pGHAccount:
+    Type: String
+    Description: GitHub Account
+    MinLength: 1
+  pGHRepo:
+    Type: String
+    Description: Github Repo
+    MinLength: 1
+  pGHBranch:
+    Type: String
+    Description: Github Branch
+    MinLength: 1
+  pGHTokenSecretName:
+    Type: String 
+    Description: Secret name to store Github Token
+    MinLength: 1
+  pGHToken:
+    Type: String 
+    Description: GitHub Token (Stored in SecretsManager)
+    MinLength: 1
+    NoEcho: True
+  pEnv:
+    Type: String
+    Description: Runtime Envirionment (dev, qa, prod..etc)
+    MinLength: 1
+  pECRImageURI:
+    Type: String
+    Description: URI of ECR Image
+    MinLength: 1
+  pTFBucketString:
+      Type: String
+      Description: S3Bucket of Terraform State files
+      MinLength: 1
+  pTFBucketSSM:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: 'Name of SSM path containing the S3 State Bucket'
+    Default: /project/tf/stateBucket
+  pTFDynamoSSM:
+    Type: AWS::SSM::Parameter::Value<String>
+    Description: 'Name of SSM path containing the DynamoDB ARN'
+    Default: /project/tf/dynamoTable/arn
+  
+
+Resources:
+
+  rGitHubSecret:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Description: GitHub Key
+      Name: !Ref pGHTokenSecretName
+      SecretString: !Ref pGHToken
+
+  rPipeRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub '${pBucket}-PIPE-ROLE-${pEnv}'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'sts:AssumeRole'
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+      Policies:
+        - PolicyName: !Sub '${pBucket}-PIPE-POLICY-${pEnv}'
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'secretsmanager:*'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 'logs:DescribeLogStreams'
+                  - 'ecr:*'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'codebuild:BatchGetBuilds'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'codebuild:StartBuild'
+                Resource:
+                  - !GetAtt 
+                      - rBuildProj
+                      - Arn
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                  - 's3:ListObjects'
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !GetAtt rPipeBucket.Arn
+                  - !Sub
+                    - 'arn:aws:s3:::${PipeBucket}/*'
+                    - {PipeBucket: !Ref rPipeBucket}
+  rBuildRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub '${pBucket}-BUILD-ROLE-${pEnv}-${AWS::Region}'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'sts:AssumeRole'
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+      Policies:
+        - PolicyName: !Sub '${pBucket}-BUILD-POLICY-${pEnv}-${AWS::Region}'
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              #- Sid: Logs
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 'logs:DescribeLogStreams'
+                Resource: '*'
+              #- Sid: ECR
+              - Effect: Allow
+                Action:
+                  - 'ecr:*'
+                Resource: '*'
+              #- Sid: S3 Pipeline TF State Bucket
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                  - 's3:ListObjects'
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !GetAtt rPipeBucket.Arn
+                  - !Sub 'arn:aws:s3:::${rPipeBucket}/*'
+                  - !Sub 'arn:aws:s3:::${pTFBucketSSM}'
+                  - !Sub 'arn:aws:s3:::${pTFBucketSSM}/*'
+              #- Sid: S3 Pipeline Bucket
+              - Effect: Allow
+                Action: 
+                 - 's3:PutObject'
+                Resource:
+                 - !GetAtt rBucket.Arn
+                 - !Sub 'arn:aws:s3:::${rBucket}/*'
+              #- Sid: TF DynamoDB
+              - Effect: Allow
+                Action:
+                  - dynamodb:*
+                Resource:
+                  - !Ref pTFDynamoSSM
+              #- Sid: S3 Pipeline All
+              - Effect: Allow
+                Action:
+                  - 's3:*'
+                Resource: '*'
+              #- Sid: All Testing DANGEROUS
+              - Effect: Allow
+                Action: 
+                  - 'ssm:*'
+                  - 'secretsmanager:*'
+                  - 'lambda:*'
+                  - 'ec2:*'
+                Resource: '*'
+            
+  rPipeBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${pBucket}-${AWS::Region}-artifacts'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+  
+  rBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${pBucket}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+    
+  rBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref rBucket
+      PolicyDocument:
+        Statement:
+          - Sid: Allow From Account
+            Effect: Allow
+            Action:
+              - 's3:*'
+            Resource:
+              - !Sub 'arn:aws:s3:::${rBucket}/*'
+            Principal:
+              AWS:
+                - !Ref pAccount
+  rPipe:
+    Type: 'AWS::CodePipeline::Pipeline'
+    Properties:
+      Name: !Sub '${pBucket}-PIPE-${pEnv}'
+      RoleArn: !GetAtt rPipeRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref rPipeBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Version: '1'
+                Provider: GitHub
+              OutputArtifacts:
+                - Name: SourceOutput
+              Configuration:
+                Owner: !Ref pGHAccount
+                Repo: !Ref pGHRepo
+                Branch: !Ref pGHBranch
+                OAuthToken: !Sub '{{resolve:secretsmanager:${pGHTokenSecretName}}}'
+                PollForSourceChanges: 'true'
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: Create
+              InputArtifacts: 
+                - Name: SourceOutput
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: '1'
+                Provider: CodeBuild
+              OutputArtifacts:
+                - Name: BuildOutput
+              Configuration:
+                ProjectName: !Ref rBuildProj
+              RunOrder: 1
+  
+  rBuildProj:
+    Type: 'AWS::CodeBuild::Project'
+    Properties:
+      Name: !Sub '${pBucket}-BUILD-PROJ-${pEnv}'
+      ServiceRole: !Ref rBuildRole
+      Source:
+        Type: CODEPIPELINE
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        PrivilegedMode: False
+        Image: !Ref pECRImageURI
+        EnvironmentVariables:
+          - Name: BUCKET_NAME
+            Value: !Sub '${pBucket}-${AWS::Region}'
+            Type: PLAINTEXT
+          - Name: AWS_ACCOUNT_ID
+            Value: !Ref pAccount
+            Type: PLAINTEXT
+          - Name: TF_BUCKET_STRING
+            Type: PLAINTEXT
+            Value: !Ref pTFBucketString
+          - Name: TF_BUCKET_SSM
+            Type: PLAINTEXT
+            Value: !Ref pTFBucketSSM
+          - Name: ENV
+            Value: !Ref pGHBranch
+      Cache:
+        Type: NO_CACHE
+      TimeoutInMinutes: 10
+      BadgeEnabled: False
+
+            
+      
+          
+
