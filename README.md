@@ -10,7 +10,7 @@ Each sample has it's own README so read those for their usage.
 
 The `SETUP/` folder contains the base CloudFormation templates to start working with Terraform in AWS.  While there are many methods to handle a green-field setup, this seemed like a logical place to start as the Cloudformation does the first setup and rarely will need updated.
 
-When working with the templates, not all of them are configured to use the ECR pipeline and are provided in a way can be used without.  To run it locally without a configured S3 Backend, simply commount out the entire `backend "s3" {}` in the `main.tf` file(s) and Terraform will default to your local machine.  
+When working with the templates, not all of them are configured to use the ECR pipeline and are provided in a way can be used without.  To run it locally without a configured S3 Backend, simply comment out the entire `backend "s3" {}` in the `main.tf` file(s) and Terraform will default to your local machine.  
 
 ## Notes
 
