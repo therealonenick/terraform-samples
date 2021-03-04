@@ -10,7 +10,7 @@ home_ipaddr         = ""
 ec2_keypair = ""
 
 #Cloud-init file
-cloud_init_file = "~/terraform-samples/tf-aws-digitalocean-cloudflare/cloud-init/cloud-init.yml"
+cloud_init_file = "cloud-init/cloud-init.yml"
 
 #AWS DyanmoDB Lock
 object_lock = "1"

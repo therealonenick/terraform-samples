@@ -21,3 +21,9 @@ output "do_droplet" {
     main    = module.do_droplet.main
   }
 }
+
+output "cf_records" {
+  value = {
+    all     = module.cloudflare.records
+  }
+}

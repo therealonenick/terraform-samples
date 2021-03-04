@@ -12,7 +12,6 @@ provider "digitalocean" {
 }
 
 provider "cloudflare" {
-  version = "~> 2.0"
   api_key = var.cf_key
   email   = var.cf_email
 }
@@ -30,7 +29,7 @@ module "aws_ec2" {
   source 					  = "./modules/aws_ec2"
   vpc_sg            = module.aws_vpc.main.primary_sg
   vpc_subnets       = module.aws_vpc.main.subnets
-  cloud_init_file   = var.cloud_init_file
+  cloud_init_file   = join("/",concat([abspath(path.cwd)],[var.cloud_init_file]))
   ec2_keypair       = var.ec2_keypair
 }
 
@@ -40,6 +39,7 @@ module "do_vpc" {
   environment       = var.environment
   region            = local.do_region
   home_ipaddr       = var.home_ipaddr
+  instance_id       = module.do_droplet.main.droplet_id
 }
 module "do_droplet" {
   source            = "./modules/do_droplet"

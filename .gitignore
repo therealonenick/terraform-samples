@@ -1,1 +1,4 @@
 .DS_STORE
+dev-local.tfvars
+*.pem
+terraform.tfvars

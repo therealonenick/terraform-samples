@@ -17,3 +17,8 @@ variable "home_ipaddr" {
   description = "IP Address of Home Network"
   type        = string
 }
+
+variable "instance_id" {
+  description = "Instance ID to apply FW too"
+  type        = string
+}

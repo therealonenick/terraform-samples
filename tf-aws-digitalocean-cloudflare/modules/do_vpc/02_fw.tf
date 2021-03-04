@@ -1,5 +1,6 @@
 resource "digitalocean_firewall" "TestFW" {
   name                    = "TestFW"
+  droplet_ids             = [var.instance_id]
 
   inbound_rule {
     protocol         = "tcp"
