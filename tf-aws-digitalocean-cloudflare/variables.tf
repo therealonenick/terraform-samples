@@ -1,6 +1,6 @@
 variable "environment" {
   description = "Envirionment Name"
-  type		  = string
+  type        = string
 }
 
 variable "vpc_master_cidr" {
@@ -56,4 +56,31 @@ variable "ec2_keypair" {
 variable "do_ssh_key" {
   description = "DO SSH KeyID to use with Droplet"
   type        = string
+}
+
+variable "aws_az_list" {
+  description = "List of AZs for Subnet mappings (change provider regionif changing here)"
+  type        = list(string)
+  default     = ["us-east-2a", "us-east-2b", "us-east-2c"]
+}
+
+variable "do_region" {
+  description = "which region in Digitial Ocean to place resources"
+  type        = string
+  default     = "nyc3"
+}
+
+variable "demo_dns_name" {
+  description = "The root resource name to be created under Cloudflare domain.  IE; 'demo' will be come 'demo.{domain from cf_zone}'"
+  type        = string
+  default     = "demo"
+}
+
+variable "tags" {
+  description = "Object of tags to add to resources"
+  type        = map(string)
+  default = {
+    terraform  = "true"
+    deployment = "tf-aws-digitalocean-cloudflare-sample"
+  }
 }

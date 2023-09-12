@@ -2,8 +2,8 @@
 environment="dev"
 
 # Shared Network Config
-vpc_master_cidr = "10.64.56.0/22"
-vpc_subnets_cidr = ["10.64.56.0/24", "10.64.57.0/24", "10.64.58.0/24"]
+vpc_master_cidr = "172.20.0.0/22"
+vpc_subnets_cidr = ["172.20.1.0/24", "172.20.2.0/24", "172.20.3.0/24"]
 home_ipaddr         = ""
 
 #AWS

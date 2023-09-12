@@ -2,3 +2,7 @@
 dev-local.tfvars
 *.pem
 terraform.tfvars
+.terraform
+*.tfplan
+*.tfstate
+*.backup

@@ -13,7 +13,7 @@
 * Create an EC2 Instance that will be setup with a cloud-init file that will run a docker demo of nginxdemos/hello
 
 2. DigitalOcean
-* Create VPC and Firewall with the same rules (SSH from an IP and HTTP from anywhere
+* Create VPC and Firewall with the same rules (SSH from an IP and HTTP from anywhere)
 * Create a Droplet that will be setup with a cloud-init file that will run a docker demo of nginxdemos/hello
 
 3. CloudFlare

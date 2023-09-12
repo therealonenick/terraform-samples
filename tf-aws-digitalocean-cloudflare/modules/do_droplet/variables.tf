@@ -17,3 +17,18 @@ variable "do_ssh_key" {
   description = "SSH KeyID to use with DO Instance"
   type        = string
 }
+
+variable "tags_local" {
+  description = "Object of tags to add to resources"
+  type        = map(string)
+  default = {
+    terraform = "true"
+    module    = "do_droplet"
+  }
+}
+
+variable "tags" {
+  description = "Object of tags to add to resources"
+  type        = map(string)
+  default     = {}
+}
