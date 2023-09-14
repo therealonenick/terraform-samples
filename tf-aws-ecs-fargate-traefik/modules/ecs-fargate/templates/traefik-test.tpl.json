@@ -1,0 +1,59 @@
+[
+    {
+        "name": "${CONTROLLER_NAME}",
+        "image": "traefik:v2.10",
+        "command": [
+          "--providers.ecs.region=${LOGS_REGION}",
+          "--providers.ecs.clusters=${CLUSTER_NAME}",
+          "--providers.ecs.exposedbydefault=false",
+          "--entryPoints.web.address=:80",
+          "--entryPoints.web.forwardedHeaders.insecure",
+          "--api.dashboard=true",
+          "--api.insecure=true",
+          "--log.level=DEBUG"
+        ],
+        "logConfiguration": {
+            "logDriver": "awslogs",
+            "options": {
+                "awslogs-create-group": "true",
+                "awslogs-group": "ecs/${CLUSTER_NAME}/${CONTROLLER_NAME}",
+                "awslogs-region": "${LOGS_REGION}",
+                "awslogs-stream-prefix": "ecs"
+            }
+        },
+        "portMappings": [
+          {
+            "containerPort": 80
+          },
+          {
+            "containerPort": 8080
+          }
+        ]
+    },
+    {
+        "name": "${CONTROLLER_NAME}-whoami",
+        "image": "traefik/whoami",
+        "logConfiguration": {
+            "logDriver": "awslogs",
+            "options": {
+                "awslogs-create-group": "true",
+                "awslogs-group": "ecs/${CLUSTER_NAME}/${CONTROLLER_NAME}-whoami",
+                "awslogs-region": "${LOGS_REGION}",
+                "awslogs-stream-prefix": "ecs"
+            }
+        },
+        "portMappings": [
+          {
+            "containerPort": 8081
+          }
+        ],
+        "command": [
+          "--port=8081"
+        ],
+        "dockerLabels": {
+            "traefik.enable": "true",
+            "traefik.http.routers.whoami.rule": "Host(`${ACCESS_FQDN}`) || Path(`/health`)",
+            "traefik.http.routers.whoami.entrypoints": "web"
+          }
+    }
+]
